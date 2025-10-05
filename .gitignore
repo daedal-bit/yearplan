@@ -2,3 +2,5 @@
 __pycache__
 *.pyc
 .yearplan.json
+.DS_Store
+yearplan_backups/

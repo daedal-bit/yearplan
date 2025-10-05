@@ -153,7 +153,7 @@ class YearPlanStorage:
         
         return 0.0
 
-    def goal_progress_status(self, goal_id: int):
+    def goal_progress_status(self, goal_id: int, today: Optional[date] = None):
         """Calculate goal progress and status"""
         goal = self.get_goal(goal_id)
         if not goal:
@@ -215,18 +215,19 @@ class YearPlanStorage:
             try:
                 start = datetime.fromisoformat(start_date).date()
                 end = datetime.fromisoformat(end_date).date()
-                today = date.today()
+                # allow injected 'today' for testing, else use current date
+                today_dt = today or date.today()
 
                 total_days_inclusive = (end - start).days + 1
                 if total_days_inclusive <= 0:
                     total_days_inclusive = 1
 
-                if today < start:
+                if today_dt < start:
                     time_progress = 0.0
-                elif today > end:
+                elif today_dt > end:
                     time_progress = 1.0
                 else:
-                    elapsed_inclusive = (today - start).days + 1
+                    elapsed_inclusive = (today_dt - start).days + 1
                     if elapsed_inclusive < 0:
                         elapsed_inclusive = 0
                     if elapsed_inclusive > total_days_inclusive:
@@ -608,31 +609,55 @@ class YearPlanStorage:
         return user
 
     def verify_user_email(self, token: str) -> bool:
-        """Verify user email with token"""
-        users = self._data.get('users', [])
-        for user in users:
-            if (user.get('verification_token') == token and 
-                not user.get('is_verified', False)):
-                
-                # Check if token is expired
+        """Verify user email with token (robust parsing and comparison)."""
+        try:
+            tok = str(token or '').strip()
+            if not tok:
+                return False
+            # Normalize to lowercase for UUID string comparison
+            tok_norm = tok.lower()
+            users = self._data.get('users', []) or []
+            for user in users:
+                if user.get('is_verified', False):
+                    continue
+                u_tok = user.get('verification_token')
+                if u_tok is None:
+                    continue
+                u_tok_norm = str(u_tok).strip().lower()
+                if u_tok_norm != tok_norm:
+                    continue
+
+                # Check expiry if present (tolerate bad format)
                 token_expires = user.get('token_expires')
                 if token_expires:
-                    expires_dt = datetime.strptime(token_expires, '%Y-%m-%d %H:%M:%S')
-                    if datetime.now() > expires_dt:
-                        return False  # Token expired
-                
-                # Verify the user
+                    try:
+                        expires_dt = datetime.strptime(token_expires, '%Y-%m-%d %H:%M:%S')
+                        if datetime.now() > expires_dt:
+                            return False  # Token expired
+                    except Exception:
+                        # If unparsable, proceed as not expired to avoid false negatives
+                        pass
+
+                # Mark verified and clear token fields
                 user['is_verified'] = True
-                user.pop('verification_token', None)
-                user.pop('token_expires', None)
+                user['verification_token'] = None
+                user['token_expires'] = None
                 self._save()
                 return True
+        except Exception:
+            return False
         return False
 
     def get_user_by_token(self, token: str):
-        """Get user by verification token"""
-        for user in self._data.get('users', []):
-            if user.get('verification_token') == token:
+        """Get user by verification token (case/whitespace-insensitive)."""
+        tok = str(token or '').strip().lower()
+        if not tok:
+            return None
+        for user in self._data.get('users', []) or []:
+            u_tok = user.get('verification_token')
+            if u_tok is None:
+                continue
+            if str(u_tok).strip().lower() == tok:
                 return user
         return None
 
