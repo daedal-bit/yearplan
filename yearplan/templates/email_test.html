@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Test - Year Plan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .test-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .config-status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .config-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .config-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .config-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .test-form {
+            margin: 20px 0;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn.secondary {
+            background: #6c757d;
+        }
+        
+        .btn.secondary:hover {
+            background: #545b62;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        .config-table th, .config-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .config-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .status-icon {
+            font-size: 1.2em;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📧 Email Configuration Test</h1>
+        
+        <!-- Email Configuration Status -->
+        <div class="config-status {{ 'config-success' if email_configured else 'config-warning' }}">
+            <span class="status-icon">{{ '✅' if email_configured else '⚠️' }}</span>
+            <strong>Email Configuration Status:</strong> 
+            {{ 'Configured' if email_configured else 'Not Configured (Development Mode)' }}
+        </div>
+        
+        <!-- Configuration Details -->
+        <h3>Current Configuration</h3>
+        <table class="config-table">
+            <tr>
+                <th>Setting</th>
+                <th>Value</th>
+                <th>Status</th>
+            </tr>
+            <tr>
+                <td>SMTP Server</td>
+                <td>{{ email_config.smtp_server }}</td>
+                <td>{{ '✅' if email_config.smtp_server else '❌' }}</td>
+            </tr>
+            <tr>
+                <td>SMTP Port</td>
+                <td>{{ email_config.smtp_port }}</td>
+                <td>{{ '✅' if email_config.smtp_port else '❌' }}</td>
+            </tr>
+            <tr>
+                <td>Email Address</td>
+                <td>{{ email_config.email[:10] + '...' if email_config.email else 'Not Set' }}</td>
+                <td>{{ '✅' if email_config.email else '❌' }}</td>
+            </tr>
+            <tr>
+                <td>Email Password</td>
+                <td>{{ '●●●●●●●●' if email_config.password else 'Not Set' }}</td>
+                <td>{{ '✅' if email_config.password else '❌' }}</td>
+            </tr>
+            <tr>
+                <td>From Name</td>
+                <td>{{ email_config.from_name }}</td>
+                <td>{{ '✅' if email_config.from_name else '❌' }}</td>
+            </tr>
+        </table>
+        
+        {% if not email_configured %}
+        <div class="config-status config-warning">
+            <strong>Development Mode:</strong> Since email is not configured, verification links will be printed to the server console instead of being sent via email.
+        </div>
+        {% endif %}
+        
+        <!-- Test Email Form -->
+        <h3>Send Test Email</h3>
+        <form class="test-form" id="test-email-form">
+            <div class="form-group">
+                <label for="test-email">Test Email Address:</label>
+                <input type="email" id="test-email" name="test_email" required placeholder="Enter email to test">
+            </div>
+            <div class="form-group">
+                <label for="test-subject">Subject:</label>
+                <input type="text" id="test-subject" name="test_subject" value="Year Plan Email Test" required>
+            </div>
+            <div class="form-group">
+                <label for="test-message">Message:</label>
+                <textarea id="test-message" name="test_message" required placeholder="Enter test message">This is a test email from Year Plan to verify email configuration is working correctly.</textarea>
+            </div>
+            <button type="submit" class="btn">Send Test Email</button>
+        </form>
+        
+        <!-- Test Verification Email -->
+        <h3>Test Verification Email</h3>
+        <form class="test-form" id="test-verification-form">
+            <div class="form-group">
+                <label for="verify-email">Email Address:</label>
+                <input type="email" id="verify-email" name="verify_email" required placeholder="Enter email for verification test">
+            </div>
+            <div class="form-group">
+                <label for="verify-name">Name:</label>
+                <input type="text" id="verify-name" name="verify_name" value="Test User" required>
+            </div>
+            <button type="submit" class="btn secondary">Send Test Verification Email</button>
+        </form>
+        
+        <!-- Result Area -->
+        <div id="result" style="display: none;"></div>
+        
+        <!-- Navigation -->
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="/email-config" class="btn primary">⚙️ Configure Email Settings</a>
+            <a href="/" class="btn secondary">Back to Year Plan</a>
+        </div>
+    </div>
+    
+    <script>
+        // Test email form
+        document.getElementById('test-email-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            showResult('Sending test email...', 'info');
+            
+            try {
+                const response = await fetch('/email-test/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('✅ ' + result.message, 'success');
+                } else {
+                    showResult('❌ ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        });
+        
+        // Test verification email form
+        document.getElementById('test-verification-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            showResult('Sending test verification email...', 'info');
+            
+            try {
+                const response = await fetch('/email-test/verification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('✅ ' + result.message, 'success');
+                } else {
+                    showResult('❌ ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        });
+        
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result ' + type;
+            resultDiv.innerHTML = message;
+            resultDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

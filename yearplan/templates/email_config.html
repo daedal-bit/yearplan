@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Configuration - Year Plan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .config-container {
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .config-status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .config-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .config-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .config-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .form-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .form-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+        
+        .form-help {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn.secondary {
+            background: #6c757d;
+        }
+        
+        .btn.secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn.success {
+            background: #28a745;
+        }
+        
+        .btn.success:hover {
+            background: #218838;
+        }
+        
+        .btn.danger {
+            background: #dc3545;
+        }
+        
+        .btn.danger:hover {
+            background: #c82333;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .result.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .preset-btn {
+            background: #e9ecef;
+            color: #495057;
+            border: 1px solid #ced4da;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .preset-btn:hover {
+            background: #dee2e6;
+        }
+        
+        .security-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .security-warning h4 {
+            margin: 0 0 10px 0;
+        }
+        
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+        }
+        
+        .password-field {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <h1>📧 Email Configuration Setup</h1>
+        
+        <div class="security-warning">
+            <h4>🔐 Security Notice</h4>
+            <p><strong>For Gmail users:</strong> Don't use your regular Gmail password! Use an "App Password" instead:</p>
+            <ol>
+                <li>Go to your Google Account settings</li>
+                <li>Enable 2-Step Verification</li>
+                <li>Generate an "App Password" for "Mail"</li>
+                <li>Use that 16-character password below</li>
+            </ol>
+            <p><small>App passwords are safer and won't expose your main Gmail password.</small></p>
+        </div>
+        
+        <!-- Current Status -->
+        <div class="config-status {{ 'config-success' if email_configured else 'config-warning' }}">
+            <span class="status-icon">{{ '✅' if email_configured else '⚠️' }}</span>
+            <strong>Current Status:</strong> 
+            {{ 'Email Configured' if email_configured else 'Email Not Configured' }}
+        </div>
+        
+        <!-- Email Configuration Form -->
+        <form id="email-config-form">
+            <div class="form-section">
+                <h3>SMTP Server Configuration</h3>
+                
+                <div class="preset-buttons">
+                    <button type="button" class="preset-btn" onclick="setGmailPreset()">📧 Gmail</button>
+                    <button type="button" class="preset-btn" onclick="setOutlookPreset()">📨 Outlook</button>
+                    <button type="button" class="preset-btn" onclick="setYahooPreset()">📮 Yahoo</button>
+                    <button type="button" class="preset-btn" onclick="clearForm()">🗑️ Clear</button>
+                </div>
+                
+                <div class="form-group">
+                    <label for="smtp_server">SMTP Server:</label>
+                    <input type="text" id="smtp_server" name="smtp_server" value="{{ email_config.smtp_server }}" required>
+                    <div class="form-help">Example: smtp.gmail.com, smtp-mail.outlook.com</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="smtp_port">SMTP Port:</label>
+                    <select id="smtp_port" name="smtp_port" required>
+                        <option value="587" {{ 'selected' if email_config.smtp_port == 587 else '' }}>587 (STARTTLS - Recommended)</option>
+                        <option value="465" {{ 'selected' if email_config.smtp_port == 465 else '' }}>465 (SSL)</option>
+                        <option value="25" {{ 'selected' if email_config.smtp_port == 25 else '' }}>25 (Plain - Not secure)</option>
+                    </select>
+                    <div class="form-help">Port 587 with STARTTLS is recommended for most email providers</div>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3>Email Credentials</h3>
+                
+                <div class="form-group">
+                    <label for="email">Email Address:</label>
+                    <input type="email" id="email" name="email" value="{{ email_config.email }}" required>
+                    <div class="form-help">Your email address (e.g., yourname@gmail.com)</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Email Password:</label>
+                    <div class="password-field">
+                        <input type="password" id="password" name="password" value="{{ email_config.password }}" required>
+                        <button type="button" class="toggle-password" onclick="togglePassword()">👁️</button>
+                    </div>
+                    <div class="form-help">For Gmail: Use App Password, not your regular password!</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="from_name">From Name:</label>
+                    <input type="text" id="from_name" name="from_name" value="{{ email_config.from_name }}" required>
+                    <div class="form-help">Name that appears as sender (e.g., "Year Plan App")</div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <button type="submit" class="btn success">💾 Save Configuration</button>
+                <button type="button" class="btn secondary" onclick="testConnection()">🔧 Test Connection</button>
+                <button type="button" class="btn" onclick="showTroubleshooting()" style="background: #17a2b8;">🆘 Gmail Help</button>
+                <button type="button" class="btn danger" onclick="clearConfiguration()">🗑️ Clear All</button>
+            </div>
+        </form>
+        
+        <!-- Result Area -->
+        <div id="result" style="display: none;"></div>
+        
+        <!-- Navigation -->
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="/email-test" class="btn secondary">🧪 Test Email</a>
+            <a href="/" class="btn secondary">🏠 Back to Year Plan</a>
+        </div>
+    </div>
+    
+    <script>
+        // Preset configurations
+        function setGmailPreset() {
+            document.getElementById('smtp_server').value = 'smtp.gmail.com';
+            document.getElementById('smtp_port').value = '587';
+        }
+        
+        function setOutlookPreset() {
+            document.getElementById('smtp_server').value = 'smtp-mail.outlook.com';
+            document.getElementById('smtp_port').value = '587';
+        }
+        
+        function setYahooPreset() {
+            document.getElementById('smtp_server').value = 'smtp.mail.yahoo.com';
+            document.getElementById('smtp_port').value = '587';
+        }
+        
+        function clearForm() {
+            document.getElementById('email-config-form').reset();
+        }
+        
+        function togglePassword() {
+            const passwordField = document.getElementById('password');
+            const toggleBtn = document.querySelector('.toggle-password');
+            
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                passwordField.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+        
+        // Save configuration
+        document.getElementById('email-config-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            showResult('Saving email configuration...', 'info');
+            
+            try {
+                const response = await fetch('/email-config/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('✅ Email configuration saved successfully! You can now send emails.', 'success');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showResult('❌ Failed to save configuration: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        });
+        
+        // Test connection
+        async function testConnection() {
+            const formData = new FormData(document.getElementById('email-config-form'));
+            const data = Object.fromEntries(formData.entries());
+            
+            showResult('Testing email connection...', 'info');
+            
+            try {
+                const response = await fetch('/email-config/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('✅ Connection test successful! Email configuration is working.', 'success');
+                } else {
+                    showResult('❌ Connection test failed: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        }
+        
+        // Clear configuration
+        async function clearConfiguration() {
+            if (!confirm('Are you sure you want to clear all email configuration?')) {
+                return;
+            }
+            
+            showResult('Clearing email configuration...', 'info');
+            
+            try {
+                const response = await fetch('/email-config/clear', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('✅ Email configuration cleared.', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showResult('❌ Failed to clear configuration: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        }
+        
+        // Show troubleshooting help
+        async function showTroubleshooting() {
+            const email = document.getElementById('email').value;
+            
+            if (!email) {
+                showResult('❌ Please enter your email address first to get specific troubleshooting help.', 'error');
+                return;
+            }
+            
+            showResult('Getting troubleshooting information...', 'info');
+            
+            try {
+                const response = await fetch('/email-config/gmail-help', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    const steps = result.troubleshooting_steps.join('<br>');
+                    showResult(`<strong>📧 Troubleshooting for ${result.email}:</strong><br><br>${steps}`, 'info');
+                } else {
+                    showResult('❌ Failed to get troubleshooting info: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showResult('❌ Network error: ' + error.message, 'error');
+            }
+        }
+        
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result ' + type;
+            resultDiv.innerHTML = message;
+            resultDiv.style.display = 'block';
+            
+            // Don't auto-hide troubleshooting info
+            if (type === 'info' && !message.includes('Troubleshooting')) {
+                setTimeout(() => {
+                    resultDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Year Plan</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Auth Screen (shown when not logged in) -->
+    <div id="auth-screen" class="auth-screen" style="display: flex;">
+        <div class="auth-container">
+            <h2>Welcome to Year Plan</h2>
+            <p>Track your annual goals with progress monitoring and smart insights</p>
+            <div class="auth-buttons">
+                <button id="show-login" class="btn primary">Login</button>
+                <button id="show-register" class="btn secondary">Sign Up</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App (shown when logged in) -->
+    <div id="main-app" class="container">
+        <!-- Top Header: left title, right user menu -->
+        <header class="top-header">
+            <div class="header-left">
+                <h1 class="app-title">My Plan</h1>
+            </div>
+            <div class="header-right">
+                <div class="user-dropdown">
+                    <button id="user-dropdown-btn" class="user-dropdown-btn">
+                        <span id="user-name"></span>
+                        <span class="dropdown-arrow">▼</span>
+                    </button>
+                    <div id="user-dropdown-menu" class="user-dropdown-menu" style="display: none;">
+                        <div class="dropdown-item" id="change-password">🔑 Change Password</div>
+                        <div class="dropdown-item" id="change-email">📧 Change Email</div>
+                        <div class="dropdown-item" id="reminder-settings">🔔 Reminder Settings</div>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item" id="send-manual-reminder">📊 Send Test Reminder</div>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item danger" id="delete-account">🗑️ Delete Account</div>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item" id="logout-btn">🚪 Logout</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Card View -->
+        <div class="cards" id="cards">
+            <!-- Cards will be rendered client-side for dynamic updates -->
+        </div>
+    </div>
+
+    <!-- Bottom-right small icon buttons (footer) -->
+    <div class="bottom-bar">
+        <button id="view-logs-btn" class="bottom-btn" title="View Goals Table">STATS</button>
+        <button id="add-goal" class="bottom-btn add-btn square-btn" title="Add New Task">+</button>
+    </div>
+
+    <!-- All modals follow below -->
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Login</h3>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-login">Cancel</button>
+                    <button type="submit">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div id="register-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Sign Up</h3>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-name">Full Name:</label>
+                    <input type="text" id="register-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email:</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password:</label>
+                    <input type="password" id="register-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="register-confirm">Confirm Password:</label>
+                    <input type="password" id="register-confirm" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-register">Cancel</button>
+                    <button type="submit">Sign Up</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Goals Table Modal -->
+    <div id="goals-table-modal" class="modal" style="display: none;">
+        <div class="modal-content logs-content">
+            <div class="modal-header">
+                <h3>📊 Goals Overview</h3>
+                <button id="close-goals-table" class="close-btn">✕</button>
+            </div>
+            <div id="goals-table-container">
+                <table id="goals-table">
+                    <thead>
+                        <tr>
+                            <th>Goal Name</th>
+                            <th>Target</th>
+                            <th>Current</th>
+                            <th>Progress</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="logs-modal" class="modal" style="display: none;">
+        <div class="modal-content logs-content">
+            <div class="modal-header">
+                <h3 id="logs-title">Logs for Goal</h3>
+                <button id="close-logs" class="close-btn">✕</button>
+            </div>
+            <div id="logs-table-container">
+                <table id="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Value</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody"></tbody>
+                </table>
+                <div id="no-logs" style="display: none;">
+                    <p>No logs yet for this goal.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for adding goals -->
+    <div id="goal-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Add New Goal</h3>
+            <form id="goal-form">
+                <div class="form-group">
+                    <label for="goal-text">Goal:</label>
+                    <input type="text" id="goal-text" placeholder="e.g., Exercise daily" required>
+                </div>
+                <div class="form-group">
+                    <label for="goal-type">Task Type:</label>
+                    <select id="goal-type">
+                        <option value="increment">Increment (Count Up) - e.g., Exercise times</option>
+                        <option value="decrement">Decrement (Count Down) - e.g., Weight loss</option>
+                        <option value="percentage">Percentage (0-100%) - e.g., Project completion</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="goal-target">Target:</label>
+                    <input type="number" id="goal-target" placeholder="e.g., 100" required>
+                </div>
+                <div class="form-group">
+                    <label for="goal-start">Start Date:</label>
+                    <input type="date" id="goal-start" required>
+                </div>
+                <div class="form-group">
+                    <label for="goal-end">End Date:</label>
+                    <div class="end-date-options">
+                        <div class="quick-date-buttons">
+                            <button type="button" class="quick-date-btn" data-days="10">10 Days</button>
+                            <button type="button" class="quick-date-btn" data-days="30">30 Days</button>
+                            <button type="button" class="quick-date-btn" data-days="100">100 Days</button>
+                            <button type="button" class="quick-date-btn" data-days="365">1 Year</button>
+                        </div>
+                        <div class="custom-date-section">
+                            <label for="goal-end" class="custom-label">Or choose custom date:</label>
+                            <input type="date" id="goal-end" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-goal">Cancel</button>
+                    <button type="submit">Add Goal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="change-password-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Change Password</h3>
+            <form id="change-password-form">
+                <div class="form-group">
+                    <label for="current-password">Current Password:</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password:</label>
+                    <input type="password" id="new-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password:</label>
+                    <input type="password" id="confirm-password" required minlength="6">
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-password-change">Cancel</button>
+                    <button type="submit">Change Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Email Modal -->
+    <div id="change-email-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Change Email</h3>
+            <form id="change-email-form">
+                <div class="form-group">
+                    <label for="current-email">Current Email:</label>
+                    <input type="email" id="current-email" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="new-email">New Email:</label>
+                    <input type="email" id="new-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="email-password">Password (for verification):</label>
+                    <input type="password" id="email-password" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-email-change">Cancel</button>
+                    <button type="submit">Change Email</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div id="delete-account-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>⚠️ Delete Account</h3>
+            <p><strong>Warning:</strong> This action cannot be undone. All your goals and progress will be permanently deleted.</p>
+            <form id="delete-account-form">
+                <div class="form-group">
+                    <label for="delete-password">Enter your password to confirm:</label>
+                    <input type="password" id="delete-password" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="delete-confirm" required>
+                        I understand that this action is permanent and cannot be undone
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-delete-account">Cancel</button>
+                    <button type="submit" class="btn danger">Delete My Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reminder Settings Modal -->
+    <div id="reminder-settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>🔔 Email Reminder Settings</h3>
+            <p>Stay on track with your annual goals by receiving progress reminders via email.</p>
+            
+            <form id="reminder-settings-form">
+                <div class="form-group">
+                    <label for="reminder-frequency">Reminder Frequency:</label>
+                    <select id="reminder-frequency" name="frequency" required>
+                        <option value="daily">📅 Daily - Every day</option>
+                        <option value="weekly">📆 Weekly - Every week (Recommended)</option>
+                        <option value="biweekly">🗓️ Bi-weekly - Every 2 weeks</option>
+                        <option value="monthly">📋 Monthly - Once a month</option>
+                        <option value="disabled">🔕 Disabled - No reminders</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="reminder-enabled">
+                        Enable email reminders
+                    </label>
+                    <div class="form-help">Uncheck to temporarily pause all reminders</div>
+                </div>
+                
+                <div class="reminder-preview" id="reminder-preview">
+                    <h4>📧 What you'll receive:</h4>
+                    <ul>
+                        <li>📊 Your goal progress summary</li>
+                        <li>✅ Completed goals celebration</li>
+                        <li>🔄 Goals that need attention</li>
+                        <li>💡 Motivational tips and insights</li>
+                        <li>🔗 Quick link to update progress</li>
+                    </ul>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" id="cancel-reminder-settings">Cancel</button>
+                    <button type="submit" class="btn primary">💾 Save Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

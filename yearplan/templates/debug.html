@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Year Plan - Debug</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .debug { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Year Plan Debug Page</h1>
+  <div class="debug">
+    <h3>Debug Info</h3>
+    <p>Page loaded successfully</p>
+    <p>Current time: <span id="time"></span></p>
+  </div>
+  
+  <div id="content">
+    <p>Loading goals...</p>
+  </div>
+
+  <script>
+    console.log('JavaScript is running');
+    document.getElementById('time').textContent = new Date().toLocaleString();
+    
+    // Test fetch
+    fetch('/api/goals')
+      .then(r => r.json())
+      .then(goals => {
+        console.log('Goals loaded:', goals);
+        document.getElementById('content').innerHTML = 
+          `<p>Found ${goals.length} goals</p>` +
+          goals.map(g => `<div>Goal: ${g.text}</div>`).join('');
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        document.getElementById('content').innerHTML = '<p>Error loading goals: ' + err.message + '</p>';
+      });
+  </script>
+</body>
+</html>

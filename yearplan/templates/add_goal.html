@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Add New Goal - MY BIG GOAL</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_version }}">
+  <style>
+    .page { max-width: 640px; margin: 24px auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .page h2 { margin-top: 0; color: #2d4a0f; }
+    .form-group { margin-bottom: 14px; }
+    .actions { display:flex; gap:12px; justify-content:flex-end; margin-top: 16px; }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      const today = new Date().toISOString().split('T')[0]
+      const startEl = document.getElementById('start')
+      const endEl = document.getElementById('end')
+      const typeEl = document.getElementById('type')
+      const targetEl = document.getElementById('target')
+      startEl.value = today
+      const start = new Date(today)
+      const end = new Date(start)
+      end.setDate(start.getDate() + 30)
+      endEl.value = end.toISOString().split('T')[0]
+      // default for percentage
+      function syncTarget(){
+        if (typeEl.value === 'percentage') {
+          targetEl.value = '100'
+          targetEl.placeholder = '100'
+        } else {
+          if (targetEl.value === '100') targetEl.value = ''
+          targetEl.placeholder = 'e.g., 100'
+        }
+      }
+      syncTarget()
+      typeEl.addEventListener('change', syncTarget)
+      startEl.addEventListener('change', (e)=>{
+        const s = new Date(e.target.value)
+        const e2 = new Date(s)
+        e2.setDate(s.getDate() + 30)
+        endEl.value = e2.toISOString().split('T')[0]
+      })
+      document.getElementById('add-form').addEventListener('submit', async (ev)=>{
+        ev.preventDefault()
+        const payload = {
+          text: document.getElementById('text').value,
+          task_type: typeEl.value,
+          target: targetEl.value ? parseFloat(targetEl.value) : undefined,
+          start_date: startEl.value,
+          end_date: endEl.value
+        }
+        const res = await fetch('/api/goals', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        if (res.ok) { window.location.href = '/' } else { alert('Failed to create goal') }
+      })
+      document.getElementById('cancel').addEventListener('click', ()=>{ window.location.href='/' })
+    })
+  </script>
+  <style>
+    .back-link { display:inline-flex; align-items:center; gap:6px; color:#457b9d; text-decoration:none; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <a href="/" class="back-link">← Back</a>
+    <h2>Add New Goal</h2>
+    <form id="add-form">
+      <div class="form-group">
+        <label for="text">Goal</label>
+        <input type="text" id="text" required placeholder="e.g., Exercise daily" style="width:100%">
+      </div>
+      <div class="form-group">
+        <label for="type">Task Type</label>
+        <select id="type" style="width:100%">
+          <option value="increment">Increment (Count Up)</option>
+          <option value="decrement">Decrement (Count Down)</option>
+          <option value="percentage">Percentage (0-100%)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="target">Target</label>
+        <input type="number" id="target" placeholder="e.g., 100" style="width:100%">
+        <small>Default: 100 for Percentage. Current starts at 0.</small>
+      </div>
+      <div class="form-group">
+        <label for="start">Start Date</label>
+        <input type="date" id="start" required style="width:100%">
+      </div>
+      <div class="form-group">
+        <label for="end">End Date (defaults to 30 days)</label>
+        <input type="date" id="end" required style="width:100%">
+      </div>
+      <div class="actions">
+        <button type="button" id="cancel" class="btn secondary">Cancel</button>
+        <button type="submit" class="btn primary">Add Goal</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
