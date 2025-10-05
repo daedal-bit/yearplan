@@ -1,2 +1,2 @@
-selenium
-Flask
+Flask>=3.0,<4
+gunicorn>=21,<22
