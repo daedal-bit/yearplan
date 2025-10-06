@@ -1,49 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOMAIN=""
-REPO_URL="https://github.com/daedal-bit/yearplan"
-BRANCH="main"
-ADMIN_EMAIL=""
-NO_GIT=0
-WITH_MYSQL=0
-MYSQL_ROOT_PASSWORD=""
-MYSQL_DATABASE="yearplan"
-MYSQL_USER="yearplan"
-MYSQL_PASSWORD="change-me"
-START_STEP=1
-
-usage() {
-  echo "Usage: $0 --domain yeargoal.6ray.com --email you@example.com [--repo <url>] [--branch <name>] [--no-git] [-s <step>] [--with-mysql [--mysql-root-password <pwd>] [--mysql-db <db>] [--mysql-user <user>] [--mysql-pass <pwd>]]"
-  echo
-  echo "Steps for -s (start from this step):"
-  echo " 1) Base packages     2) User/dirs       3) Repo setup      4) Python venv"
-  echo " 5) Env file          6) SELinux         7) Nginx vhost     8) Certbot venv"
-  echo " 9) App service      10) Certbot timer  11) Firewall       12) Nginx start"
-  echo "13) MySQL (optional) 14) Restart app"
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --domain) DOMAIN="$2"; shift 2 ;;
-    --email) ADMIN_EMAIL="$2"; shift 2 ;;
-    --repo) REPO_URL="$2"; shift 2 ;;
-  --branch) BRANCH="$2"; shift 2 ;;
-  -s|--start-step) START_STEP="$2"; shift 2 ;;
-  --no-git) NO_GIT=1; shift 1 ;;
-  --with-mysql) WITH_MYSQL=1; shift 1 ;;
-  --mysql-root-password) MYSQL_ROOT_PASSWORD="$2"; shift 2 ;;
-  --mysql-db) MYSQL_DATABASE="$2"; shift 2 ;;
-  --mysql-user) MYSQL_USER="$2"; shift 2 ;;
-  --mysql-pass) MYSQL_PASSWORD="$2"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown arg: $1"; usage; exit 1 ;;
-  esac
-done
-
-#!/usr/bin/env bash
-set -euo pipefail
-
 # Configuration (defaults)
 DOMAIN=""
 REPO_URL="https://github.com/daedal-bit/yearplan"
@@ -67,6 +24,7 @@ usage() {
   echo "13) MySQL (optional) 14) Restart app"
 }
 
+# Argument parsing
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
@@ -81,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     --mysql-user) MYSQL_USER="$2"; shift 2 ;;
     --mysql-pass) MYSQL_PASSWORD="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
     *) echo "Unknown arg: $1"; usage; exit 1 ;;
   esac
 done
@@ -92,6 +51,16 @@ fi
 # Ensure root
 if [[ $EUID -ne 0 ]]; then
   echo "Please run as root (sudo)."; exit 1
+fi
+
+# Debug: print parsed args (excluding secrets)
+echo "[ARGS] DOMAIN=$DOMAIN"
+echo "[ARGS] ADMIN_EMAIL=$ADMIN_EMAIL NO_GIT=$NO_GIT WITH_MYSQL=$WITH_MYSQL START_STEP=$START_STEP"
+echo "[ARGS] MYSQL_DATABASE=$MYSQL_DATABASE MYSQL_USER=$MYSQL_USER MYSQL_PASSWORD=$MYSQL_PASSWORD"
+if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+  echo "[ARGS] MYSQL_ROOT_PASSWORD=****"
+else
+  echo "[ARGS] MYSQL_ROOT_PASSWORD=<empty>"
 fi
 
 prompt_continue() {
