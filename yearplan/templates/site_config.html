@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site Configuration</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; color: #222; }
+    h1 { margin-bottom: 8px; }
+    .desc { color: #666; margin-bottom: 20px; }
+    form { max-width: 720px; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+    .row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+    .row label { width: 160px; color: #444; }
+    .row input { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; }
+    .actions { display: flex; gap: 12px; }
+    button { padding: 8px 14px; border: 0; border-radius: 6px; cursor: pointer; }
+    .primary { background: #2563eb; color: #fff; }
+    .secondary { background: #e5e7eb; color: #111; }
+    .ok { color: #16a34a; }
+    .err { color: #dc2626; }
+    .card { padding: 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 16px; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+  </style>
+  <script>
+    async function saveSiteConfig(ev){
+      ev.preventDefault()
+      const payload = {
+        paypal_link: document.getElementById('paypal_link').value.trim(),
+        base_url: document.getElementById('base_url').value.trim(),
+        host_link: document.getElementById('host_link').value.trim(),
+      }
+      const res = await fetch('/site-config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+      const data = await res.json()
+      const msg = document.getElementById('site-msg')
+      if(res.ok){ msg.textContent = 'Saved'; msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    async function saveEmailConfig(ev){
+      ev.preventDefault()
+      const payload = {
+        smtp_server: document.getElementById('smtp_server').value,
+        smtp_port: Number(document.getElementById('smtp_port').value || '587'),
+        email: document.getElementById('email_user').value,
+        password: document.getElementById('email_password').value,
+        from_name: document.getElementById('from_name').value,
+      }
+      const res = await fetch('/email-config/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+      const data = await res.json()
+      const msg = document.getElementById('email-msg')
+      if(res.ok && data.ok){ msg.textContent = 'Saved'; msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    async function testEmail(){
+      const res = await fetch('/email-config/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) })
+      const data = await res.json()
+      const msg = document.getElementById('email-test-msg')
+      if(res.ok){ msg.textContent = 'SMTP ok'; msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    async function seedUser(ev){
+      ev.preventDefault()
+      const email = document.getElementById('seed_email').value.trim()
+      const password = document.getElementById('seed_password').value
+      const res = await fetch('/site-config/seed-user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) })
+      const data = await res.json()
+      const msg = document.getElementById('seed-msg')
+      if(res.ok){ msg.textContent = 'Seeded: '+(data.email||''); msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    async function deleteSeedUser(){
+      const email = document.getElementById('seed_email').value.trim()
+      if(!email) { alert('Enter email to delete'); return }
+      if(!confirm('Delete user '+email+'?')) return
+      const res = await fetch('/site-config/seed-user', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email}) })
+      const data = await res.json()
+      const msg = document.getElementById('seed-msg')
+      if(res.ok){ msg.textContent = 'Deleted: '+email+' ('+(data.deleted||0)+')'; msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    async function purgeSeedUsers(){
+      if(!confirm('Delete ALL seed/admin test users?')) return
+      const res = await fetch('/site-config/seed-users/purge', { method:'DELETE' })
+      const data = await res.json()
+      const msg = document.getElementById('seed-msg')
+      if(res.ok){ msg.textContent = 'Purged '+(data.deleted||0)+' users'; msg.className='ok' } else { msg.textContent = data.error || 'Failed'; msg.className='err' }
+    }
+    function defaultAdminEmail(){
+      const host = (location.host||'').split(':')[0] || 'yeargoal.6ray.com'
+      return 'admin@'+host
+    }
+  </script>
+  
+</head>
+<body>
+  <h1>Website Configuration</h1>
+  <div class="desc">Manage global settings for your Year Plan site.</div>
+
+  <form onsubmit="saveSiteConfig(event)">
+    <div class="row"><label for="paypal_link">PayPal Link</label><input id="paypal_link" value="{{ paypal_link or '' }}" placeholder="https://paypal.me/yourname" /></div>
+    <div class="row"><label for="base_url">Base URL</label><input id="base_url" value="{{ base_url or '' }}" placeholder="http://127.0.0.1:8081" /></div>
+    <div class="row"><label for="host_link">Host Link</label><input id="host_link" value="{{ host_link or '' }}" placeholder="http://127.0.0.1:8081" /></div>
+    <div class="actions"><button class="primary" type="submit">Save</button><span id="site-msg"></span></div>
+  </form>
+
+  <div class="card">
+    <h3>Email Settings</h3>
+    <form onsubmit="saveEmailConfig(event)">
+      <div class="row"><label for="smtp_server">SMTP Server</label><input id="smtp_server" value="{{ email_config.smtp_server }}" /></div>
+      <div class="row"><label for="smtp_port">SMTP Port</label><input id="smtp_port" type="number" value="{{ email_config.smtp_port }}" /></div>
+      <div class="row"><label for="email_user">Email User</label><input id="email_user" value="{{ email_config.email }}" /></div>
+      <div class="row"><label for="email_password">Email Password</label><input id="email_password" type="password" value="{{ email_config.password }}" /></div>
+      <div class="row"><label for="from_name">From Name</label><input id="from_name" value="{{ email_config.from_name }}" /></div>
+      <div class="actions"><button class="primary" type="submit">Save</button> <button class="secondary" type="button" onclick="testEmail()">Test SMTP</button> <span id="email-msg"></span> <span id="email-test-msg"></span></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Seed Verified User</h3>
+    <form onsubmit="seedUser(event)">
+      <div class="row"><label for="seed_email">Email</label><input id="seed_email" placeholder="admin@example.com" onfocus="if(!this.value)this.value=defaultAdminEmail()" /></div>
+      <div class="row"><label for="seed_password">Password</label><input id="seed_password" type="text" placeholder="password" /></div>
+      <div class="actions">
+        <button class="primary" type="submit">Seed</button>
+        <button class="secondary" type="button" onclick="deleteSeedUser()">Delete</button>
+        <button class="secondary" type="button" onclick="purgeSeedUsers()">Delete all seed users</button>
+        <span id="seed-msg"></span>
+      </div>
+    </form>
+    <div class="desc">Creates or updates a verified user for quick testing.</div>
+  </div>
+
+  <div class="desc">Tip: You can also configure via environment variables like <code>PAYPAL_LINK</code>, <code>HOST_LINK</code>, <code>BASE_URL</code>. Saving here writes ~/.yearplan_site_config.json.</div>
+</body>
+</html>

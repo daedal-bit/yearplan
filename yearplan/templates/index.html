@@ -20,7 +20,7 @@
   </div>
 
   <!-- Main App (shown when logged in) -->
-  <div id="main-app" class="container">
+  <div id="main-app" class="container" style="display: none;">
     <!-- Top Header: left title, right user menu -->
     <header class="top-header">
       <div class="header-left">
@@ -36,6 +36,7 @@
           <div class="dropdown-item" id="change-password">🔑 Change Password</div>
           <div class="dropdown-item" id="change-email">📧 Change Email</div>
           <div class="dropdown-item" id="reminder-settings">🔔 Reminder Settings</div>
+          <div class="dropdown-item" id="site-config-link" style="display:none;">🛠️ Site Config</div>
           <div class="dropdown-item" id="toggle-completed">🙈 Hide Old Goals</div>
           <div class="dropdown-divider"></div>
           <div class="dropdown-item" id="send-manual-reminder">📊 Send Test Reminder</div>
@@ -140,7 +141,7 @@
   </div>
 
   <!-- Bottom-right small icon buttons (footer) -->
-  <div class="bottom-bar">
+  <div class="bottom-bar" style="display: none;">
     <a id="donate-btn" class="bottom-btn donate-btn" href="{{ donation_url }}" target="_blank" rel="noopener" title="Support this app">$</a>
     <button id="view-logs-btn" class="bottom-btn summary-btn" title="Goals Statistics" aria-label="Goals Statistics">📊</button>
     <button id="add-goal" class="bottom-btn add-btn square-btn" title="Add New Task">+</button>
@@ -165,8 +166,8 @@
         </div>
         <div class="form-group" id="start-field">
           <label for="goal-start-value">Start:</label>
-          <input type="number" id="goal-start-value" placeholder="0" value="0">
-          <div class="form-help">Default is 0. This records the starting value.</div>
+          <input type="number" id="goal-start-value" placeholder="">
+          <div class="form-help">Enter your starting value (leave blank if not applicable).</div>
         </div>
         <div class="form-group" id="target-field">
           <label for="goal-target">Target:</label>

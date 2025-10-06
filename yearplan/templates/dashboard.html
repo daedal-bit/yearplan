@@ -1,0 +1,16 @@
+{% extends "simple.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<p>Welcome, {{ user_email }}</p>
+{% if goals and goals|length %}
+<ul>
+  {% for g in goals %}
+  <li>
+    <strong>{{ g.title }}</strong> - {{ g.status }} ({{ g.target_date }})
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No goals yet. <a href="/create-goal">Create one</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,331 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DOMAIN=""
+REPO_URL="https://github.com/daedal-bit/yearplan"
+BRANCH="main"
+ADMIN_EMAIL=""
+NO_GIT=0
+WITH_MYSQL=0
+MYSQL_ROOT_PASSWORD=""
+MYSQL_DATABASE="yearplan"
+MYSQL_USER="yearplan"
+MYSQL_PASSWORD="change-me"
+START_STEP=1
+
+usage() {
+  echo "Usage: $0 --domain yeargoal.6ray.com --email you@example.com [--repo <url>] [--branch <name>] [--no-git] [-s <step>] [--with-mysql [--mysql-root-password <pwd>] [--mysql-db <db>] [--mysql-user <user>] [--mysql-pass <pwd>]]"
+  echo
+  echo "Steps for -s (start from this step):"
+  echo " 1) Base packages     2) User/dirs       3) Repo setup      4) Python venv"
+  echo " 5) Env file          6) SELinux         7) Nginx vhost     8) Certbot venv"
+  echo " 9) App service      10) Certbot timer  11) Firewall       12) Nginx start"
+  echo "13) MySQL (optional) 14) Restart app"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --domain) DOMAIN="$2"; shift 2 ;;
+    --email) ADMIN_EMAIL="$2"; shift 2 ;;
+    --repo) REPO_URL="$2"; shift 2 ;;
+  --branch) BRANCH="$2"; shift 2 ;;
+  -s|--start-step) START_STEP="$2"; shift 2 ;;
+  --no-git) NO_GIT=1; shift 1 ;;
+  --with-mysql) WITH_MYSQL=1; shift 1 ;;
+  --mysql-root-password) MYSQL_ROOT_PASSWORD="$2"; shift 2 ;;
+  --mysql-db) MYSQL_DATABASE="$2"; shift 2 ;;
+  --mysql-user) MYSQL_USER="$2"; shift 2 ;;
+  --mysql-pass) MYSQL_PASSWORD="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1"; usage; exit 1 ;;
+  esac
+done
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Configuration (defaults)
+DOMAIN=""
+REPO_URL="https://github.com/daedal-bit/yearplan"
+BRANCH="main"
+ADMIN_EMAIL=""
+NO_GIT=0
+WITH_MYSQL=0
+MYSQL_ROOT_PASSWORD=""
+MYSQL_DATABASE="yearplan"
+MYSQL_USER="yearplan"
+MYSQL_PASSWORD="change-me"
+START_STEP=1
+
+usage() {
+  echo "Usage: $0 --domain yeargoal.6ray.com --email you@example.com [--repo <url>] [--branch <name>] [--no-git] [-s <step>] [--with-mysql [--mysql-root-password <pwd>] [--mysql-db <db>] [--mysql-user <user>] [--mysql-pass <pwd>]]"
+  echo
+  echo "Steps for -s (start from this step):"
+  echo " 1) Base packages     2) User/dirs       3) Repo setup      4) Python venv"
+  echo " 5) Env file          6) SELinux         7) Nginx vhost     8) Certbot venv"
+  echo " 9) App service      10) Certbot timer  11) Firewall       12) Nginx start"
+  echo "13) MySQL (optional) 14) Restart app"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --domain) DOMAIN="$2"; shift 2 ;;
+    --email) ADMIN_EMAIL="$2"; shift 2 ;;
+    --repo) REPO_URL="$2"; shift 2 ;;
+    --branch) BRANCH="$2"; shift 2 ;;
+    -s|--start-step) START_STEP="$2"; shift 2 ;;
+    --no-git) NO_GIT=1; shift 1 ;;
+    --with-mysql) WITH_MYSQL=1; shift 1 ;;
+    --mysql-root-password) MYSQL_ROOT_PASSWORD="$2"; shift 2 ;;
+    --mysql-db) MYSQL_DATABASE="$2"; shift 2 ;;
+    --mysql-user) MYSQL_USER="$2"; shift 2 ;;
+    --mysql-pass) MYSQL_PASSWORD="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1"; usage; exit 1 ;;
+  esac
+done
+
+if [[ -z "$DOMAIN" || -z "$ADMIN_EMAIL" ]]; then
+  usage; exit 1
+fi
+
+# Ensure root
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run as root (sudo)."; exit 1
+fi
+
+prompt_continue() {
+  local stepmsg="$1"
+  echo
+  echo "[PAUSE] $stepmsg"
+  read -r -p "Type 'yes' to continue: " ans
+  if [[ "$ans" != "yes" ]]; then
+    echo "Aborting as requested."; exit 1
+  fi
+}
+
+# STEP 1: Base packages
+if (( START_STEP <= 1 )); then
+  echo "[STEP 1] Installing base packages (python3, venv, git, nginx, firewalld, selinux utils)"
+  if command -v dnf >/dev/null 2>&1; then
+    dnf -y install python3 python3-venv git nginx firewalld policycoreutils-python-utils
+  else
+    yum -y install python3 python3-venv git nginx firewalld policycoreutils-python
+  fi
+  echo "[STEP 1] Done."
+  prompt_continue "Base packages installed."
+else
+  echo "[STEP 1] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 2: User and directories
+if (( START_STEP <= 2 )); then
+  echo "[STEP 2] Creating user and directories under /opt/yearplan/yearplan"
+  id -u yearplan >/dev/null 2>&1 || useradd -r -s /sbin/nologin -d /opt/yearplan yearplan
+  install -d -o yearplan -g yearplan /opt/yearplan /opt/yearplan/venv /opt/yearplan/yearplan
+  install -d -o root -g root -m 0755 /var/www/letsencrypt
+  echo "[STEP 2] Done."
+  prompt_continue "User and directories created."
+else
+  echo "[STEP 2] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 3: Repo setup
+if (( START_STEP <= 3 )); then
+  echo "[STEP 3] Repository setup at /opt/yearplan/yearplan"
+  if [[ $NO_GIT -eq 0 ]]; then
+    if [[ ! -d /opt/yearplan/yearplan/.git ]]; then
+      sudo -u yearplan git clone "$REPO_URL" /opt/yearplan/yearplan
+    fi
+    pushd /opt/yearplan/yearplan >/dev/null
+    sudo -u yearplan git fetch --all || true
+    sudo -u yearplan git checkout "$BRANCH" || true
+    sudo -u yearplan git pull || true
+    popd >/dev/null
+  else
+    echo "[INFO] --no-git provided; ensure /opt/yearplan/yearplan contains your app"
+  fi
+  if [[ ! -f /opt/yearplan/yearplan/requirements.txt ]]; then
+    echo "[WARN] /opt/yearplan/yearplan/requirements.txt not found."
+  fi
+  echo "[STEP 3] Done."
+  prompt_continue "Repo in place."
+else
+  echo "[STEP 3] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 4: Python venv and dependencies
+if (( START_STEP <= 4 )); then
+  echo "[STEP 4] Creating Python venv and installing requirements"
+  python3 -m venv /opt/yearplan/venv
+  /opt/yearplan/venv/bin/pip install --upgrade pip
+  /opt/yearplan/venv/bin/pip install -r /opt/yearplan/yearplan/requirements.txt
+  echo "[STEP 4] Done."
+  prompt_continue "Python dependencies installed."
+else
+  echo "[STEP 4] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 5: Environment file
+if (( START_STEP <= 5 )); then
+  echo "[STEP 5] Creating /etc/yearplan.env (if missing)"
+  if [[ ! -f /etc/yearplan.env ]]; then
+    install -m 0640 -o root -g root /opt/yearplan/yearplan/deploy/env.example /etc/yearplan.env || true
+    sed -i "s#HOST_LINK=.*#HOST_LINK=https://$DOMAIN#g" /etc/yearplan.env
+    sed -i "s#MYSQL_DATABASE=.*#MYSQL_DATABASE=$MYSQL_DATABASE#g" /etc/yearplan.env
+    sed -i "s#MYSQL_USER=.*#MYSQL_USER=$MYSQL_USER#g" /etc/yearplan.env
+    sed -i "s#MYSQL_PASSWORD=.*#MYSQL_PASSWORD=$MYSQL_PASSWORD#g" /etc/yearplan.env
+  fi
+  echo "[STEP 5] Done."
+  prompt_continue "Environment ready."
+else
+  echo "[STEP 5] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 6: SELinux boolean
+if (( START_STEP <= 6 )); then
+  echo "[STEP 6] Configuring SELinux to allow Nginx proxy"
+  if command -v setsebool >/dev/null 2>&1; then
+    setsebool -P httpd_can_network_connect 1 || true
+  fi
+  echo "[STEP 6] Done."
+  prompt_continue "SELinux configured."
+else
+  echo "[STEP 6] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 7: Nginx vhost
+if (( START_STEP <= 7 )); then
+  echo "[STEP 7] Installing Nginx vhost for $DOMAIN"
+  install -d /etc/nginx/conf.d
+  install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.6ray.com.conf
+  sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.6ray.com.conf
+  echo "[STEP 7] Done."
+  prompt_continue "Nginx vhost installed."
+else
+  echo "[STEP 7] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 8: Certbot venv & issuance (optional)
+if (( START_STEP <= 8 )); then
+  echo "[STEP 8] Installing Certbot (pip venv) and attempting issuance"
+  python3 -m venv /opt/certbot-venv
+  /opt/certbot-venv/bin/pip install --upgrade pip
+  /opt/certbot-venv/bin/pip install certbot
+  install -d -m 0755 -o nginx -g nginx /var/www/letsencrypt
+  /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN" || true
+  echo "[STEP 8] Done."
+  prompt_continue "Certbot venv ready."
+else
+  echo "[STEP 8] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 9: App service
+if (( START_STEP <= 9 )); then
+  echo "[STEP 9] Installing systemd service for YearPlan"
+  install -m 0644 /opt/yearplan/yearplan/deploy/yearplan.service /etc/systemd/system/yearplan.service
+  systemctl daemon-reload
+  systemctl enable yearplan || true
+  echo "[STEP 9] Done."
+  prompt_continue "Service installed."
+else
+  echo "[STEP 9] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 10: Certbot timer
+if (( START_STEP <= 10 )); then
+  echo "[STEP 10] Installing certbot renew service & timer"
+  cat >/etc/systemd/system/certbot-renew.service <<EOF
+[Unit]
+Description=Certbot Renew (pip venv)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/certbot-venv/bin/certbot renew --quiet --deploy-hook "/bin/systemctl reload nginx"
+EOF
+  cat >/etc/systemd/system/certbot-renew.timer <<EOF
+[Unit]
+Description=Run certbot renew twice daily
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now certbot-renew.timer || true
+  echo "[STEP 10] Done."
+  prompt_continue "Timer enabled."
+else
+  echo "[STEP 10] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 11: Firewall
+if (( START_STEP <= 11 )); then
+  echo "[STEP 11] Opening firewall for HTTP/HTTPS"
+  systemctl enable --now firewalld || true
+  firewall-cmd --permanent --add-service=http || true
+  firewall-cmd --permanent --add-service=https || true
+  firewall-cmd --reload || true
+  echo "[STEP 11] Done."
+  prompt_continue "Firewall configured."
+else
+  echo "[STEP 11] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 12: Nginx start
+if (( START_STEP <= 12 )); then
+  echo "[STEP 12] Starting Nginx"
+  systemctl enable --now nginx
+  systemctl reload nginx || true
+  echo "[STEP 12] Done."
+  prompt_continue "Nginx is up."
+else
+  echo "[STEP 12] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 13: Optional MySQL setup
+if (( START_STEP <= 13 )); then
+  if [[ $WITH_MYSQL -eq 1 ]]; then
+    echo "[STEP 13] Installing MySQL Server (community)"
+    if ! rpm -q mysql-community-server >/dev/null 2>&1; then
+      rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+      dnf -y install mysql-community-server || yum -y install mysql-community-server
+    fi
+    systemctl enable --now mysqld
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+      echo "[STEP 13] Creating database and user (best-effort)"
+      mysql --connect-timeout=5 -uroot -e 'SELECT 1' >/dev/null 2>&1 || true
+      MYSQL_CMD=(mysql -uroot)
+      if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+        MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
+      fi
+      "${MYSQL_CMD[@]}" <<SQL || true
+CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+    fi
+    echo "[STEP 13] Done."
+    prompt_continue "MySQL step completed (if enabled)."
+  else
+    echo "[STEP 13] Skipped (WITH_MYSQL=0)"
+  fi
+else
+  echo "[STEP 13] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 14: Restart app
+if (( START_STEP <= 14 )); then
+  echo "[STEP 14] Restarting yearplan"
+  systemctl restart yearplan || true
+  echo "[STEP 14] Done."
+else
+  echo "[STEP 14] Skipped (start-step=$START_STEP)"
+fi
+
+echo
+echo "✅ Provisioning complete. Visit: https://$DOMAIN/"

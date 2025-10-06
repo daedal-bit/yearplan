@@ -1,0 +1,19 @@
+[Unit]
+Description=YearPlan Gunicorn Service
+After=network.target
+Wants=nginx.service
+
+[Service]
+Type=simple
+User=yearplan
+Group=yearplan
+EnvironmentFile=/etc/yearplan.env
+WorkingDirectory=/opt/yearplan/yearplan
+ExecStart=/opt/yearplan/venv/bin/gunicorn -w 2 -b 127.0.0.1:8000 yearplan.app_mysql:app
+Restart=always
+RestartSec=3
+# Ensure we find shared libraries if needed
+Environment=PATH=/opt/yearplan/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+
+[Install]
+WantedBy=multi-user.target

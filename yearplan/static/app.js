@@ -532,6 +532,7 @@ document.getElementById('goal-type').addEventListener('change', (e) => {
   const targetEl = document.getElementById('goal-target')
   const startField = document.getElementById('start-field')
   const targetField = document.getElementById('target-field')
+  const startValueEl = document.getElementById('goal-start-value')
   if (type === 'percentage') {
     targetEl.value = '100'
     targetEl.placeholder = '100'
@@ -542,34 +543,52 @@ document.getElementById('goal-type').addEventListener('change', (e) => {
     if (targetField) targetField.style.display = ''
   }
   if (startField) startField.style.display = ''
+  // Default Start to 0 for increment only if user hasn't typed anything yet
+  if (startValueEl) {
+    if (type === 'increment') {
+      if (startValueEl.value === '' || startValueEl.value == null) {
+        startValueEl.value = '0'
+        startValueEl.dataset.autofill = '1'
+      }
+    } else {
+      // If we previously auto-filled, clear for decrement/percentage
+      if (startValueEl.dataset.autofill === '1') {
+        startValueEl.value = ''
+      }
+      startValueEl.dataset.autofill = '0'
+    }
+  }
 })
 
 function showGoalModal() {
+  // Open modal and prep inputs
   document.getElementById('goal-modal').style.display = 'flex'
   document.getElementById('goal-text').focus()
   document.getElementById('goal-target').required = true
-  
+
+  // Elements used below (declare before use)
+  const startValueEl = document.getElementById('goal-start-value')
+  const typeEl = document.getElementById('goal-type')
+  const targetEl = document.getElementById('goal-target')
+  const targetField = document.getElementById('target-field')
+  const startField = document.getElementById('start-field')
+
   // Set default start date to current date
   const today = new Date().toISOString().split('T')[0]
   document.getElementById('goal-start').value = today
-  
+
   // Default end date to +30 days from start
   const start = new Date(today)
   const end = new Date(start)
   end.setDate(start.getDate() + 30)
   document.getElementById('goal-end').value = end.toISOString().split('T')[0]
-  
+
   // Mark the 30 days quick button active (visual default)
   document.querySelectorAll('.quick-date-btn').forEach(btn => btn.classList.remove('active'))
   const thirtyBtn = document.querySelector('.quick-date-btn[data-days="30"]')
   if (thirtyBtn) thirtyBtn.classList.add('active')
-  
-  // Default target for percentage goals is 100
-  const typeEl = document.getElementById('goal-type')
-  const targetEl = document.getElementById('goal-target')
-  const targetField = document.getElementById('target-field')
-  const startField = document.getElementById('start-field')
-  const startValueEl = document.getElementById('goal-start-value')
+
+  // Default target for percentage goals is 100 and toggle target visibility
   if (typeEl && typeEl.value === 'percentage') {
     targetEl.value = '100'
     targetEl.placeholder = '100'
@@ -581,9 +600,24 @@ function showGoalModal() {
     if (startField) startField.style.display = ''
     if (targetField) targetField.style.display = ''
   }
-  
-  // Clear any previous quick date button selections
-  document.querySelectorAll('.quick-date-btn').forEach(btn => btn.classList.remove('active'))
+
+  // For increment, default Start to 0 if empty; for others, leave blank (clear only auto-filled)
+  if (startValueEl) {
+    const typeNow = (typeEl && typeEl.value) ? typeEl.value : 'increment'
+    if (typeNow === 'increment') {
+      if (startValueEl.value === '' || startValueEl.value == null) {
+        startValueEl.value = '0'
+        startValueEl.dataset.autofill = '1'
+      }
+    } else {
+      if (startValueEl.dataset.autofill === '1') {
+        startValueEl.value = ''
+      }
+      startValueEl.dataset.autofill = '0'
+    }
+    // Mark as user-entered once they type
+    startValueEl.addEventListener('input', () => { startValueEl.dataset.autofill = '0' }, { once: true })
+  }
 }
 
 function hideGoalModal() {
@@ -796,9 +830,26 @@ function showAuthScreen() {
 function showMainApp() {
   document.getElementById('auth-screen').style.display = 'none'
   document.getElementById('main-app').style.display = 'block'
-  document.getElementById('user-name').textContent = currentUser?.name || 'User'
+  // Determine if current user is a seed/admin user
+  const emailLower = (currentUser?.email || '').toLowerCase()
+  const host = (window.location.host || '').split(':')[0] || 'yeargoal.6ray.com'
+  const defaultAdmin = `admin@${host}`.toLowerCase()
+  const isSeedAdmin = emailLower.startsWith('admin@') ||
+                      emailLower === defaultAdmin ||
+                      emailLower === 'admin@yeargoal.6ray.com' ||
+                      emailLower === 'd@d.com' ||
+                      emailLower === 'd@daijiong.com'
+  // Display name: 'admin' for seed/admin users
+  document.getElementById('user-name').textContent = isSeedAdmin ? 'admin' : (currentUser?.name || 'User')
   const bottomBar = document.querySelector('.bottom-bar')
   if (bottomBar) bottomBar.style.display = 'flex'
+  try {
+    // Reveal Site Config link for seed/admin users
+    const siteCfg = document.getElementById('site-config-link')
+    if (siteCfg) {
+      siteCfg.style.display = isSeedAdmin ? 'block' : 'none'
+    }
+  } catch {}
   loadAndRender()
 }
 
@@ -838,7 +889,8 @@ async function handleLogin(event) {
     if (response.ok) {
       currentUser = data.user
       hideLoginModal()
-      showMainApp()
+      // Re-check with server to sync session and toggle UI reliably
+      await checkAuthStatus()
     } else {
       if (data.verification_required) {
         // Show verification prompt with resend option
@@ -878,6 +930,7 @@ async function handleRegister(event) {
     if (response.ok) {
       // Show verification message
       hideRegisterModal()
+      // Do NOT reveal the dev link on the user-facing page
       showVerificationMessage(data.email, data.message)
     } else {
       alert(data.error || 'Registration failed')
@@ -1447,6 +1500,10 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('change-password').addEventListener('click', showChangePasswordModal)
   document.getElementById('change-email').addEventListener('click', showChangeEmailModal)
   document.getElementById('reminder-settings').addEventListener('click', showReminderSettingsModal)
+  const siteConfigLink = document.getElementById('site-config-link')
+  if (siteConfigLink) {
+    siteConfigLink.addEventListener('click', () => { window.open('/site-config', '_blank') })
+  }
   const toggleCompleted = document.getElementById('toggle-completed')
   if (toggleCompleted) {
     toggleCompleted.addEventListener('click', async () => {
