@@ -1,0 +1,7 @@
+Temporary file for testing git pull on server.
+
+- Created: 2025-10-06
+- Repo: yearplan
+- Safe to delete after verifying deployment.
+
+If you see this file on the server after `git pull`, the sync worked.
