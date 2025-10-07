@@ -206,12 +206,44 @@ else
   echo "[STEP 8] Skipped (start-step=$START_STEP)"
 fi
 
+# PRE: MySQL bootstrap early (if requested) so app can start
+if (( WITH_MYSQL == 1 )) && (( START_STEP <= 9 )); then
+  echo "[PRE] Ensuring MySQL is installed and running before starting app"
+  if ! systemctl is-active --quiet mysqld; then
+    if ! rpm -q mysql-community-server >/dev/null 2>&1; then
+      rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+      dnf -y install mysql-community-server || yum -y install mysql-community-server
+    fi
+    systemctl enable --now mysqld || true
+  fi
+  if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+    echo "[PRE] Creating database and app user if needed"
+    MYSQL_CMD=(mysql -uroot)
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+      MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
+    fi
+    "${MYSQL_CMD[@]}" <<SQL || true
+CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+  else
+    echo "[PRE][INFO] MYSQL_ROOT_PASSWORD not supplied; skipping DB/user creation"
+  fi
+fi
+
 # STEP 9: App service
 if (( START_STEP <= 9 )); then
   echo "[STEP 9] Installing systemd service for YearPlan"
   install -m 0644 /opt/yearplan/yearplan/deploy/yearplan.service /etc/systemd/system/yearplan.service
   systemctl daemon-reload
-  systemctl enable yearplan || true
+  systemctl enable --now yearplan || true
+  # Brief wait and check port 8000
+  sleep 1
+  if ! ss -ltn '( sport = :8000 )' | grep -q 8000; then
+    echo "[STEP 9][WARN] Gunicorn not listening on 127.0.0.1:8000 yet; check 'journalctl -u yearplan -e' if issues persist."
+  fi
   echo "[STEP 9] Done."
   prompt_continue "Service installed."
 else
