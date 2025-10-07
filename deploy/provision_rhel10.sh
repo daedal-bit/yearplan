@@ -183,6 +183,8 @@ fi
 if (( START_STEP <= 7 )); then
   echo "[STEP 7] Installing temporary HTTP-only Nginx vhost for $DOMAIN"
   install -d /etc/nginx/conf.d
+  # Remove any old HTTPS vhost that could reference missing certs
+  rm -f /etc/nginx/conf.d/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf || true
   install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.http.conf /etc/nginx/conf.d/yeargoal.http.conf
   sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.http.conf
   echo "[STEP 7] Done."
@@ -262,15 +264,23 @@ fi
 # STEP 12: Nginx start
 if (( START_STEP <= 12 )); then
   echo "[STEP 12] Starting Nginx"
-  systemctl enable --now nginx
+  # Ensure no stale HTTPS vhost is present before first start
+  rm -f /etc/nginx/conf.d/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf || true
+  # Validate configuration before starting
+  if ! nginx -t; then
+    echo "[STEP 12][ERROR] nginx configuration test failed. Current conf.d listing:" >&2
+    ls -la /etc/nginx/conf.d >&2 || true
+  fi
+  systemctl enable --now nginx || true
   systemctl reload nginx || true
   # Attempt certificate issuance now that HTTP is serving ACME webroot
   echo "[STEP 12] Attempting certificate issuance for $DOMAIN"
   if /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN"; then
     echo "[STEP 12] Certificate obtained successfully. Switching to HTTPS vhost."
-    install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf
-    sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.https.conf
-    rm -f /etc/nginx/conf.d/yeargoal.http.conf || true
+    # Standardize on filename matching the domain template
+    install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.6ray.com.conf
+    sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.6ray.com.conf
+    rm -f /etc/nginx/conf.d/yeargoal.http.conf /etc/nginx/conf.d/yeargoal.https.conf || true
     systemctl reload nginx || systemctl restart nginx || true
   else
     echo "[STEP 12][WARN] Certificate issuance failed; staying on HTTP-only vhost for now."
@@ -313,19 +323,25 @@ else
   echo "[STEP 13] Skipped (start-step=$START_STEP)"
 fi
 
-# STEP 14: Restart app and switch to HTTPS vhost (if certs present)
+# STEP 14: Restart app and ensure HTTPS vhost (if certs present)
 if (( START_STEP <= 14 )); then
   echo "[STEP 14] Restarting yearplan"
   systemctl restart yearplan || true
   # If certificate exists, switch Nginx to HTTPS vhost
   if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" && -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]]; then
-    echo "[STEP 14] Installing HTTPS vhost for $DOMAIN"
-    install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf
-    sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.https.conf
-    # remove temporary HTTP vhost and replace with an HTTP->HTTPS redirect
-    rm -f /etc/nginx/conf.d/yeargoal.http.conf || true
-    # Keep port 80 redirect in the https conf file already provided
-    systemctl reload nginx || systemctl restart nginx || true
+    echo "[STEP 14] Ensuring HTTPS vhost for $DOMAIN"
+    if [[ ! -f /etc/nginx/conf.d/yeargoal.6ray.com.conf ]]; then
+      install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.6ray.com.conf
+      sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.6ray.com.conf
+    fi
+    # remove temporary HTTP vhost
+    rm -f /etc/nginx/conf.d/yeargoal.http.conf /etc/nginx/conf.d/yeargoal.https.conf || true
+    # validate and reload nginx
+    if nginx -t; then
+      systemctl reload nginx || systemctl restart nginx || true
+    else
+      echo "[STEP 14][WARN] nginx -t failed; not reloading"
+    fi
   else
     echo "[STEP 14][INFO] SSL certs not present; staying on HTTP-only vhost."
   fi
