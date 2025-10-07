@@ -250,6 +250,8 @@ if (( WITH_MYSQL == 1 )) && (( START_STEP <= 9 )); then
         echo "[PRE][WARN] Could not detect temporary MySQL root password; ensure root password is correct."
       fi
     fi
+  # Relax password policy to allow provided app password (make persistent)
+  "${MYSQL_CMD[@]}" -e "SET PERSIST validate_password.policy=LOW; SET PERSIST validate_password.length=8;" || true
   "${MYSQL_CMD[@]}" <<SQL || true
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
@@ -402,6 +404,8 @@ if (( START_STEP <= 13 )); then
       if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
         MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
       fi
+  # Relax password policy to allow provided app password (make persistent)
+  "${MYSQL_CMD[@]}" -e "SET PERSIST validate_password.policy=LOW; SET PERSIST validate_password.length=8;" || true
   "${MYSQL_CMD[@]}" <<SQL || true
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
