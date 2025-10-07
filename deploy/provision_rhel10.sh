@@ -273,17 +273,40 @@ if (( START_STEP <= 12 )); then
   fi
   systemctl enable --now nginx || true
   systemctl reload nginx || true
-  # Attempt certificate issuance now that HTTP is serving ACME webroot
-  echo "[STEP 12] Attempting certificate issuance for $DOMAIN"
-  if /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN"; then
+  # Verify ACME webroot reachability before attempting issuance
+  echo "[STEP 12] Verifying ACME webroot reachability via http://$DOMAIN/.well-known/acme-challenge/"
+  ACME_DIR="/var/www/letsencrypt/.well-known/acme-challenge"
+  mkdir -p "$ACME_DIR"
+  PROBE_FILE="probe_$(date +%s)"
+  PROBE_VALUE="ok-$(date +%s)"
+  echo "$PROBE_VALUE" > "$ACME_DIR/$PROBE_FILE"
+  REACHABLE=0
+  for i in 1 2 3; do
+    RESP=$(curl -fsS --max-time 5 "http://$DOMAIN/.well-known/acme-challenge/$PROBE_FILE" || true)
+    if [[ "$RESP" == "$PROBE_VALUE" ]]; then
+      REACHABLE=1; break
+    fi
+    echo "[STEP 12] ACME probe attempt $i failed (got='${RESP:-<empty>}'), retrying..."
+    sleep 2
+  done
+  rm -f "$ACME_DIR/$PROBE_FILE" || true
+
+  if (( REACHABLE == 0 )); then
+    echo "[STEP 12][WARN] ACME webroot not reachable from the Internet. Skipping certificate issuance."
+    echo "               Check DNS (A record), Security Groups, firewall-cmd, and Nginx mapping, then rerun with '-s 12'."
+  else
+    # Attempt certificate issuance now that HTTP is serving ACME webroot
+    echo "[STEP 12] Attempting certificate issuance for $DOMAIN"
+    if /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN"; then
     echo "[STEP 12] Certificate obtained successfully. Switching to HTTPS vhost."
     # Standardize on filename matching the domain template
     install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.6ray.com.conf
     sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.6ray.com.conf
     rm -f /etc/nginx/conf.d/yeargoal.http.conf /etc/nginx/conf.d/yeargoal.https.conf || true
     systemctl reload nginx || systemctl restart nginx || true
-  else
-    echo "[STEP 12][WARN] Certificate issuance failed; staying on HTTP-only vhost for now."
+    else
+      echo "[STEP 12][WARN] Certificate issuance failed; staying on HTTP-only vhost for now."
+    fi
   fi
   echo "[STEP 12] Done."
   prompt_continue "Nginx is up (and HTTPS configured if issuance succeeded)."
