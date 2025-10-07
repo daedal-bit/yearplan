@@ -1266,5 +1266,233 @@ def api_send_reminder():
             print('[WEB] api_send_reminder error:', e)
         return jsonify({'error': 'internal error'}), 500
 
+# Cron-style endpoint: process reminders for all verified users
+@app.route('/api/process-reminders', methods=['POST'])
+def api_process_reminders():
+    try:
+        sent_count = 0
+        failed_count = 0
+        total_processed = 0
+
+        # Fetch all verified users
+        users = []
+        try:
+            with storage.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT id, email FROM users WHERE is_verified = TRUE")
+                users = cur.fetchall() or []
+        except Exception as e:
+            if DEBUG_WEB:
+                print('[REMINDER] Failed to list users:', e)
+            return jsonify({'error': 'cannot list users'}), 500
+
+        # Helper to build summary for a given user email (reuse logic from manual endpoint)
+        def _build_summaries_for(email_addr: str):
+            raw = storage.get_user_goals(email_addr) or []
+            lines = []
+            html_rows = []
+            from datetime import datetime as _dt, date as _date
+            for g in raw:
+                title = g.get('title') or 'Untitled'
+                # description may contain JSON with extras
+                extras = {}
+                try:
+                    if g.get('description'):
+                        import json as _json
+                        extras = _json.loads(g['description']) if isinstance(g['description'], str) else (g['description'] or {})
+                except Exception:
+                    extras = {}
+
+                start_val = float(extras.get('start_value') or 0)
+                target_val = extras.get('target')
+                target_val_f = float(target_val) if target_val is not None else None
+                task_type = (extras.get('task_type') or 'increment').lower()
+
+                # Accumulate logs to compute current
+                current = start_val
+                try:
+                    logs = storage.get_goal_logs(g.get('id'), email_addr) or []
+                except Exception:
+                    logs = []
+                for l in reversed(logs):
+                    act = (l.get('action') or '').lower()
+                    try:
+                        val = float(l.get('value') or 0)
+                    except Exception:
+                        val = 0.0
+                    if act == 'increment':
+                        current += val
+                    elif act == 'decrement':
+                        current -= val
+                    elif act == 'update':
+                        current = val
+
+                # Compute percent
+                percent = 0.0
+                if task_type == 'percentage':
+                    try:
+                        percent = max(0.0, min(100.0, float(current)))
+                    except Exception:
+                        percent = 0.0
+                elif target_val_f is not None:
+                    try:
+                        denom = abs(target_val_f - start_val)
+                        percent = 100.0 if denom == 0 else max(0.0, min(100.0, (abs(current - start_val) / denom) * 100.0))
+                    except Exception:
+                        percent = 0.0
+
+                # Expected percent by time
+                expected_pct = None
+                try:
+                    sd = extras.get('start_date')
+                    ed = g.get('target_date')
+                    fmt = '%Y-%m-%d'
+                    if sd and isinstance(sd, str) and len(sd) >= 10:
+                        start_d = _dt.strptime(sd[:10], fmt).date()
+                    else:
+                        cad = str(g.get('created_at'))[:10]
+                        start_d = _dt.strptime(cad, fmt).date()
+                    end_d = _dt.strptime(str(ed)[:10], fmt).date() if ed else None
+                    if end_d:
+                        today = _date.today()
+                        total_days = max(1, (end_d - start_d).days + 1)
+                        if today < start_d:
+                            elapsed = 0
+                        elif today > end_d:
+                            elapsed = total_days
+                        else:
+                            elapsed = (today - start_d).days + 1
+                        elapsed = max(1, min(total_days, elapsed))
+                        expected_pct = (elapsed / float(total_days)) * 100.0
+                except Exception:
+                    expected_pct = None
+
+                end_date = g.get('target_date')
+                end_s = str(end_date)[:10] if end_date else '-'
+                if task_type == 'percentage':
+                    line = f"- {title}: {percent:.1f}% (target 100%) due {end_s}"
+                else:
+                    if target_val_f is not None:
+                        tgt_s = f"{int(target_val_f)}" if float(target_val_f).is_integer() else f"{target_val_f}"
+                    else:
+                        tgt_s = "?"
+                    cur_s = f"{int(current)}" if float(current).is_integer() else f"{current}"
+                    line = f"- {title}: {percent:.1f}% ({cur_s}/{tgt_s}) due {end_s}"
+                lines.append(line)
+
+                status = 'Pending'
+                if percent >= 100.0:
+                    status = '🏁 Completed'
+                elif expected_pct is not None and expected_pct > 0:
+                    ratio = percent / expected_pct
+                    if ratio >= 1.3:
+                        status = '🚀 Ahead'
+                    elif ratio <= 0.7:
+                        status = '🔴 Behind'
+                    else:
+                        status = '✅ On Track'
+                else:
+                    status = '⏳ In Progress' if percent > 0 else 'Pending'
+
+                prog_color = '#ff4444' if status == '🔴 Behind' else '#4CAF50'
+                target_display = f"{int(target_val_f)}" if (target_val_f is not None and float(target_val_f).is_integer()) else (f"{target_val_f}" if target_val_f is not None else '-')
+                current_display = f"{int(current)}" if float(current).is_integer() else f"{current}"
+                html_rows.append(f"""
+                    <tr>
+                      <td style='padding:8px;border-bottom:1px solid #eee;'>
+                        <div style='font-weight:600;color:#222'>{title}</div>
+                        <div style='color:#666;font-size:12px'>{current_display} of {target_display} completed</div>
+                      </td>
+                      <td style='padding:8px;border-bottom:1px solid #eee;'>
+                        <div style='width:140px;max-width:100%;height:8px;background:#eee;border-radius:4px;overflow:hidden;'>
+                          <div style='width:{percent:.1f}%;height:8px;background:{prog_color};'></div>
+                        </div>
+                      </td>
+                      <td style='padding:8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;'>{percent:.1f}%</td>
+                      <td style='padding:8px;border-bottom:1px solid #eee;'>
+                        <span style='display:inline-block;padding:2px 8px;border-radius:12px;background:{"#ffd6d6" if status=="🔴 Behind" else "#e7f7ec"};color:{"#c00000" if status=="🔴 Behind" else "#1b5e20"};font-size:12px;'>{status}</span>
+                      </td>
+                    </tr>
+                """)
+
+            if not lines:
+                lines.append("(No active goals yet)")
+
+            name = (email_addr.split('@')[0] or 'User').strip().title()
+            subject = 'Your Year Plan reminder'
+            body = (
+                f"Hello {name},\n\n"
+                "Here is your current goals summary:\n\n"
+                + "\n".join(lines) +
+                "\n\nKeep going!\n"
+            )
+            table_rows_html = "".join(html_rows) if html_rows else "<tr><td colspan='4' style='padding:12px;color:#666;'>No goals yet</td></tr>"
+            body_html = f"""
+            <div style='font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.5;'>
+              <p>Hello {name},</p>
+              <p>Here is your current goals summary:</p>
+              <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='border-collapse:collapse;min-width:320px;'>
+                <thead>
+                  <tr>
+                    <th align='left' style='padding:8px;border-bottom:2px solid #ddd;font-size:13px;color:#555;'>Project Name</th>
+                    <th align='left' style='padding:8px;border-bottom:2px solid #ddd;font-size:13px;color:#555;'>Progress</th>
+                    <th align='right' style='padding:8px;border-bottom:2px solid #ddd;font-size:13px;color:#555;'>Complete</th>
+                    <th align='left' style='padding:8px;border-bottom:2px solid #ddd;font-size:13px;color:#555;'>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {table_rows_html}
+                </tbody>
+              </table>
+              <p style='margin-top:16px;'>Keep going!</p>
+            </div>
+            """
+            return subject, body, body_html
+
+        for row in users:
+            # row could be a tuple or dict depending on cursor default
+            try:
+                user_id = row[0] if isinstance(row, tuple) else row.get('id')
+                email = row[1] if isinstance(row, tuple) else row.get('email')
+            except Exception:
+                continue
+
+            # Honor in-memory user preferences if present
+            prefs = _REMINDER_PREFS.get(email, {'enabled': True, 'frequency': 'weekly'})
+            if not prefs.get('enabled', True):
+                continue
+
+            total_processed += 1
+            try:
+                subject, body, body_html = _build_summaries_for(email)
+                if EMAIL_CONFIG.get('email') and EMAIL_CONFIG.get('password'):
+                    err = send_test_email(email, EMAIL_CONFIG, subject=subject, body_text=body, body_html=body_html)
+                    if err:
+                        failed_count += 1
+                        if DEBUG_WEB:
+                            print(f"[REMINDER] Failed for {email}: {err}")
+                    else:
+                        sent_count += 1
+                else:
+                    # Not configured: treat as sent in dev
+                    if DEBUG_WEB:
+                        print(f"[REMINDER] Email not configured; would send to {email}")
+                    sent_count += 1
+            except Exception as e:
+                failed_count += 1
+                if DEBUG_WEB:
+                    print(f"[REMINDER] Error building/sending for {email}: {e}")
+
+        return jsonify({
+            'message': f'Processed reminders for {total_processed} users',
+            'sent': sent_count,
+            'failed': failed_count,
+            'total_processed': total_processed
+        }), 200
+    except Exception as e:
+        if DEBUG_WEB:
+            print('[REMINDER] process error:', e)
+        return jsonify({'error': 'internal error'}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
