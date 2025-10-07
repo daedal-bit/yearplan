@@ -13,7 +13,7 @@ MYSQL_DATABASE="yearplan"
 MYSQL_USER="yearplan"
 MYSQL_PASSWORD="change-me"
 START_STEP=1
-MYSQL_NOGPGCHECK=0
+MYSQL_NOGPGCHECK=1
 
 usage() {
   echo "Usage: $0 --domain yeargoal.6ray.com --email you@example.com [--repo <url>] [--branch <name>] [--no-git] [-s <step>] [--with-mysql [--mysql-root-password <pwd>] [--mysql-db <db>] [--mysql-user <user>] [--mysql-pass <pwd>]]"
@@ -233,9 +233,20 @@ if (( WITH_MYSQL == 1 )) && (( START_STEP <= 9 )); then
   fi
   if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
     echo "[PRE] Creating database and app user if needed"
-    MYSQL_CMD=(mysql -uroot)
-    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
-      MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
+    MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
+    # If root authentication fails, try using temporary password from mysqld.log
+    if ! "${MYSQL_CMD[@]}" -e 'SELECT 1' >/dev/null 2>&1; then
+      TMPPASS=$(grep -m1 -oE 'temporary password.*: .*' /var/log/mysqld.log 2>/dev/null | awk -F': ' '{print $2}' | tail -n1 || true)
+      if [[ -n "$TMPPASS" ]]; then
+        echo "[PRE] Detected temporary MySQL root password; attempting to set provided root password"
+        if mysql -uroot -p"$TMPPASS" --connect-expired-password -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';"; then
+          MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
+        else
+          echo "[PRE][WARN] Failed to set root password using temporary password. You may need a stronger password or to adjust validate_password policy."
+        fi
+      else
+        echo "[PRE][WARN] Could not detect temporary MySQL root password; ensure root password is correct."
+      fi
     fi
     "${MYSQL_CMD[@]}" <<SQL || true
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -254,8 +265,13 @@ if (( START_STEP <= 9 )); then
   install -m 0644 /opt/yearplan/yearplan/deploy/yearplan.service /etc/systemd/system/yearplan.service
   systemctl daemon-reload
   systemctl enable --now yearplan || true
-  # Brief wait and check port 8000
-  sleep 1
+  # Wait briefly for port 8000 to come up
+  for i in 1 2 3 4 5; do
+    if ss -ltn '( sport = :8000 )' | grep -q 8000; then
+      break
+    fi
+    sleep 1
+  done
   if ! ss -ltn '( sport = :8000 )' | grep -q 8000; then
     echo "[STEP 9][WARN] Gunicorn not listening on 127.0.0.1:8000 yet; check 'journalctl -u yearplan -e' if issues persist."
   fi
