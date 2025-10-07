@@ -343,9 +343,15 @@ if (( START_STEP <= 12 )); then
   systemctl enable --now nginx || true
   systemctl reload nginx || true
   # Verify ACME webroot reachability before attempting issuance
-  echo "[STEP 12] Verifying ACME webroot reachability via http://$DOMAIN/.well-known/acme-challenge/"
   ACME_DIR="/var/www/letsencrypt/.well-known/acme-challenge"
   mkdir -p "$ACME_DIR"
+  chown -R nginx:nginx /var/www/letsencrypt || true
+  chmod -R 755 /var/www/letsencrypt || true
+  if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+    chcon -R -t httpd_sys_content_t /var/www/letsencrypt || true
+    restorecon -R /var/www/letsencrypt || true
+  fi
+  echo "[STEP 12] Verifying ACME webroot reachability via http://$DOMAIN/.well-known/acme-challenge/<probe-file>"
   PROBE_FILE="probe_$(date +%s)"
   PROBE_VALUE="ok-$(date +%s)"
   echo "$PROBE_VALUE" > "$ACME_DIR/$PROBE_FILE"
