@@ -21,7 +21,7 @@ usage() {
   echo " 1) Base packages     2) User/dirs       3) Repo setup      4) Python venv"
   echo " 5) Env file          6) SELinux         7) Nginx vhost     8) Certbot venv"
   echo " 9) App service      10) Certbot timer  11) Firewall       12) Nginx start"
-  echo "13) MySQL (optional) 14) Restart app"
+  echo "13) MySQL (optional) 14) Restart app     15) Health check"
 }
 
 # Argument parsing
@@ -75,11 +75,11 @@ prompt_continue() {
 
 # STEP 1: Base packages
 if (( START_STEP <= 1 )); then
-  echo "[STEP 1] Installing base packages (python3, venv, git, nginx, firewalld, selinux utils)"
+  echo "[STEP 1] Installing base packages (python3, pip, git, nginx, firewalld, SELinux utils)"
   if command -v dnf >/dev/null 2>&1; then
-    dnf -y install python3 python3-venv git nginx firewalld policycoreutils-python-utils
+    dnf -y install python3 python3-pip git nginx firewalld policycoreutils-python-utils || true
   else
-    yum -y install python3 python3-venv git nginx firewalld policycoreutils-python
+    yum -y install python3 python3-pip git nginx firewalld policycoreutils-python || true
   fi
   echo "[STEP 1] Done."
   prompt_continue "Base packages installed."
@@ -126,9 +126,25 @@ fi
 # STEP 4: Python venv and dependencies
 if (( START_STEP <= 4 )); then
   echo "[STEP 4] Creating Python venv and installing requirements"
-  python3 -m venv /opt/yearplan/venv
-  /opt/yearplan/venv/bin/pip install --upgrade pip
-  /opt/yearplan/venv/bin/pip install -r /opt/yearplan/yearplan/requirements.txt
+  # Try stdlib venv first
+  if ! python3 -m venv /opt/yearplan/venv 2>/dev/null; then
+    echo "[STEP 4] python3 -m venv failed; bootstrapping ensurepip and retrying"
+    python3 -m ensurepip --upgrade || true
+    if ! python3 -m venv /opt/yearplan/venv 2>/dev/null; then
+      echo "[STEP 4] venv still unavailable; falling back to virtualenv via pip"
+      python3 -m pip install --upgrade pip setuptools wheel || true
+      python3 -m pip install virtualenv || true
+      python3 -m virtualenv -p python3 /opt/yearplan/venv
+    fi
+  fi
+
+  # Upgrade tooling inside venv and install deps
+  /opt/yearplan/venv/bin/pip install --upgrade pip setuptools wheel
+  if [[ -f /opt/yearplan/yearplan/requirements.txt ]]; then
+    /opt/yearplan/venv/bin/pip install -r /opt/yearplan/yearplan/requirements.txt
+  else
+    echo "[STEP 4][WARN] requirements.txt not found at /opt/yearplan/yearplan/requirements.txt"
+  fi
   echo "[STEP 4] Done."
   prompt_continue "Python dependencies installed."
 else
@@ -294,6 +310,19 @@ if (( START_STEP <= 14 )); then
   echo "[STEP 14] Done."
 else
   echo "[STEP 14] Skipped (start-step=$START_STEP)"
+fi
+
+# STEP 15: Health check (gunicorn on 127.0.0.1:8000)
+if (( START_STEP <= 15 )); then
+  echo "[STEP 15] Checking app health at http://127.0.0.1:8000/health"
+  sleep 2
+  if curl -fsS --max-time 8 http://127.0.0.1:8000/health >/dev/null; then
+    echo "[STEP 15] Health check OK"
+  else
+    echo "[STEP 15][WARN] Health check failed; check 'journalctl -u yearplan -e'"
+  fi
+else
+  echo "[STEP 15] Skipped (start-step=$START_STEP)"
 fi
 
 echo

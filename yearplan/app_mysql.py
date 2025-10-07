@@ -85,6 +85,29 @@ def get_paypal_link():
 storage = MySQLStorage()
 _REMINDER_PREFS = {}
 
+# Lightweight health check
+@app.route('/health', methods=['GET'])
+def health():
+    try:
+        # Minimal DB check: attempt a simple stats query
+        try:
+            stats = storage.get_stats()
+            db_ok = True
+        except Exception as e:
+            if DEBUG_WEB:
+                print(f"[HEALTH] DB error: {e}")
+            stats = None
+            db_ok = False
+        return jsonify({
+            'status': 'ok' if db_ok else 'degraded',
+            'db': 'up' if db_ok else 'down',
+            'stats': stats
+        }), (200 if db_ok else 503)
+    except Exception as e:
+        if DEBUG_WEB:
+            print(f"[HEALTH] error: {e}\n{traceback.format_exc()}")
+        return jsonify({'status': 'error'}), 500
+
 @app.before_request
 def _log_req():
     if DEBUG_WEB:
