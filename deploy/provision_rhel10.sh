@@ -13,6 +13,7 @@ MYSQL_DATABASE="yearplan"
 MYSQL_USER="yearplan"
 MYSQL_PASSWORD="change-me"
 START_STEP=1
+MYSQL_NOGPGCHECK=0
 
 usage() {
   echo "Usage: $0 --domain yeargoal.6ray.com --email you@example.com [--repo <url>] [--branch <name>] [--no-git] [-s <step>] [--with-mysql [--mysql-root-password <pwd>] [--mysql-db <db>] [--mysql-user <user>] [--mysql-pass <pwd>]]"
@@ -22,6 +23,13 @@ usage() {
   echo " 5) Env file          6) SELinux         7) Nginx vhost     8) Certbot venv"
   echo " 9) App service      10) Certbot timer  11) Firewall       12) Nginx start"
   echo "13) MySQL (optional) 14) Restart app     15) Health check"
+  echo
+  echo "MySQL options (when using --with-mysql):"
+  echo "  --mysql-root-password <pwd>  Root password used for DB creation"
+  echo "  --mysql-db <db>               App database name (default: yearplan)"
+  echo "  --mysql-user <user>           App DB user (default: yearplan)"
+  echo "  --mysql-pass <pwd>            App DB password (default: change-me)"
+  echo "  --mysql-no-gpg-check          Bypass GPG checks when installing MySQL repo/packages"
 }
 
 # Argument parsing
@@ -38,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --mysql-db) MYSQL_DATABASE="$2"; shift 2 ;;
     --mysql-user) MYSQL_USER="$2"; shift 2 ;;
     --mysql-pass) MYSQL_PASSWORD="$2"; shift 2 ;;
+    --mysql-no-gpg-check) MYSQL_NOGPGCHECK=1; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     --) shift; break ;;
     *) echo "Unknown arg: $1"; usage; exit 1 ;;
@@ -62,6 +71,7 @@ if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
 else
   echo "[ARGS] MYSQL_ROOT_PASSWORD=<empty>"
 fi
+echo "[ARGS] MYSQL_NOGPGCHECK=$MYSQL_NOGPGCHECK"
 
 prompt_continue() {
   local stepmsg="$1"
@@ -211,8 +221,13 @@ if (( WITH_MYSQL == 1 )) && (( START_STEP <= 9 )); then
   echo "[PRE] Ensuring MySQL is installed and running before starting app"
   if ! systemctl is-active --quiet mysqld; then
     if ! rpm -q mysql-community-server >/dev/null 2>&1; then
-      rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
-      dnf -y install mysql-community-server || yum -y install mysql-community-server
+      if (( MYSQL_NOGPGCHECK == 1 )); then
+        rpm -Uvh --nosignature https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+        dnf -y --nogpgcheck install mysql-community-server || yum -y --nogpgcheck install mysql-community-server || true
+      else
+        rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+        dnf -y install mysql-community-server || yum -y install mysql-community-server
+      fi
     fi
     systemctl enable --now mysqld || true
   fi
@@ -351,8 +366,13 @@ if (( START_STEP <= 13 )); then
   if [[ $WITH_MYSQL -eq 1 ]]; then
     echo "[STEP 13] Installing MySQL Server (community)"
     if ! rpm -q mysql-community-server >/dev/null 2>&1; then
-      rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
-      dnf -y install mysql-community-server || yum -y install mysql-community-server
+      if (( MYSQL_NOGPGCHECK == 1 )); then
+        rpm -Uvh --nosignature https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+        dnf -y --nogpgcheck install mysql-community-server || yum -y --nogpgcheck install mysql-community-server || true
+      else
+        rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm || true
+        dnf -y install mysql-community-server || yum -y install mysql-community-server
+      fi
     fi
     systemctl enable --now mysqld
     if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
