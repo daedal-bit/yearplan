@@ -171,6 +171,8 @@ if (( START_STEP <= 5 )); then
     sed -i "s#MYSQL_USER=.*#MYSQL_USER=$MYSQL_USER#g" /etc/yearplan.env
     sed -i "s#MYSQL_PASSWORD=.*#MYSQL_PASSWORD=$MYSQL_PASSWORD#g" /etc/yearplan.env
   fi
+  # Ensure host is 127.0.0.1 (not localhost) so grants match and TCP is used
+  sed -i "s#^MYSQL_HOST=.*#MYSQL_HOST=127.0.0.1#g" /etc/yearplan.env || true
   echo "[STEP 5] Done."
   prompt_continue "Environment ready."
 else
@@ -248,10 +250,12 @@ if (( WITH_MYSQL == 1 )) && (( START_STEP <= 9 )); then
         echo "[PRE][WARN] Could not detect temporary MySQL root password; ensure root password is correct."
       fi
     fi
-    "${MYSQL_CMD[@]}" <<SQL || true
+  "${MYSQL_CMD[@]}" <<SQL || true
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'localhost';
 FLUSH PRIVILEGES;
 SQL
   else
@@ -398,10 +402,12 @@ if (( START_STEP <= 13 )); then
       if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
         MYSQL_CMD=(mysql -uroot -p"$MYSQL_ROOT_PASSWORD")
       fi
-      "${MYSQL_CMD[@]}" <<SQL || true
+  "${MYSQL_CMD[@]}" <<SQL || true
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'localhost';
 FLUSH PRIVILEGES;
 SQL
     fi
