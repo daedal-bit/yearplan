@@ -179,28 +179,27 @@ else
   echo "[STEP 6] Skipped (start-step=$START_STEP)"
 fi
 
-# STEP 7: Nginx vhost
+# STEP 7: Nginx vhost (HTTP bootstrap)
 if (( START_STEP <= 7 )); then
-  echo "[STEP 7] Installing Nginx vhost for $DOMAIN"
+  echo "[STEP 7] Installing temporary HTTP-only Nginx vhost for $DOMAIN"
   install -d /etc/nginx/conf.d
-  install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.6ray.com.conf
-  sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.6ray.com.conf
+  install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.http.conf /etc/nginx/conf.d/yeargoal.http.conf
+  sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.http.conf
   echo "[STEP 7] Done."
-  prompt_continue "Nginx vhost installed."
+  prompt_continue "HTTP vhost installed."
 else
   echo "[STEP 7] Skipped (start-step=$START_STEP)"
 fi
 
-# STEP 8: Certbot venv & issuance (optional)
+# STEP 8: Certbot venv (prepare for issuance later)
 if (( START_STEP <= 8 )); then
-  echo "[STEP 8] Installing Certbot (pip venv) and attempting issuance"
+  echo "[STEP 8] Installing Certbot (pip venv)"
   python3 -m venv /opt/certbot-venv
   /opt/certbot-venv/bin/pip install --upgrade pip
   /opt/certbot-venv/bin/pip install certbot
   install -d -m 0755 -o nginx -g nginx /var/www/letsencrypt
-  /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN" || true
   echo "[STEP 8] Done."
-  prompt_continue "Certbot venv ready."
+  prompt_continue "Certbot venv ready (certificate will be requested after Nginx is up)."
 else
   echo "[STEP 8] Skipped (start-step=$START_STEP)"
 fi
@@ -265,8 +264,19 @@ if (( START_STEP <= 12 )); then
   echo "[STEP 12] Starting Nginx"
   systemctl enable --now nginx
   systemctl reload nginx || true
+  # Attempt certificate issuance now that HTTP is serving ACME webroot
+  echo "[STEP 12] Attempting certificate issuance for $DOMAIN"
+  if /opt/certbot-venv/bin/certbot certonly --non-interactive --agree-tos --email "$ADMIN_EMAIL" --webroot -w /var/www/letsencrypt -d "$DOMAIN"; then
+    echo "[STEP 12] Certificate obtained successfully. Switching to HTTPS vhost."
+    install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf
+    sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.https.conf
+    rm -f /etc/nginx/conf.d/yeargoal.http.conf || true
+    systemctl reload nginx || systemctl restart nginx || true
+  else
+    echo "[STEP 12][WARN] Certificate issuance failed; staying on HTTP-only vhost for now."
+  fi
   echo "[STEP 12] Done."
-  prompt_continue "Nginx is up."
+  prompt_continue "Nginx is up (and HTTPS configured if issuance succeeded)."
 else
   echo "[STEP 12] Skipped (start-step=$START_STEP)"
 fi
@@ -303,10 +313,22 @@ else
   echo "[STEP 13] Skipped (start-step=$START_STEP)"
 fi
 
-# STEP 14: Restart app
+# STEP 14: Restart app and switch to HTTPS vhost (if certs present)
 if (( START_STEP <= 14 )); then
   echo "[STEP 14] Restarting yearplan"
   systemctl restart yearplan || true
+  # If certificate exists, switch Nginx to HTTPS vhost
+  if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" && -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]]; then
+    echo "[STEP 14] Installing HTTPS vhost for $DOMAIN"
+    install -m 0644 /opt/yearplan/yearplan/deploy/nginx/yeargoal.6ray.com.conf /etc/nginx/conf.d/yeargoal.https.conf
+    sed -i "s#yeargoal.6ray.com#$DOMAIN#g" /etc/nginx/conf.d/yeargoal.https.conf
+    # remove temporary HTTP vhost and replace with an HTTP->HTTPS redirect
+    rm -f /etc/nginx/conf.d/yeargoal.http.conf || true
+    # Keep port 80 redirect in the https conf file already provided
+    systemctl reload nginx || systemctl restart nginx || true
+  else
+    echo "[STEP 14][INFO] SSL certs not present; staying on HTTP-only vhost."
+  fi
   echo "[STEP 14] Done."
 else
   echo "[STEP 14] Skipped (start-step=$START_STEP)"
